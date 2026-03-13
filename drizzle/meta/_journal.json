@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1773361701605,
+      "tag": "0000_petite_white_queen",
+      "breakpoints": true
+    }
+  ]
+}

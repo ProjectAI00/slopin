@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { serveStatic } from '@hono/node-server/serve-static'
+
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import db, { sqlite } from '../db/index.ts'
@@ -56,8 +56,9 @@ const oneHourAgo = () => nowSeconds() - 3600
 ensureLoopStatus()
 
 app.use('/api/*', cors())
-app.use('/assets/*', serveStatic({ root: './ui/dist' }))
-app.get('/', serveStatic({ path: './ui/dist/index.html' }))
+app.get('/', (c) => { try { return new Response(Bun.file('./ui/dist/index.html')) } catch { return c.text('UI not built yet') } })
+
+
 
 app.onError((error, c) => {
   console.error(error)
@@ -157,7 +158,7 @@ app.get('/api/agent/:id', (c) => {
   const id = c.req.param('id')
   const agent = sqlite
     .prepare(`
-      SELECT id, name, headline, background, specialty, personality, agent_values as values,
+      SELECT id, name, headline, background, specialty, personality, "values",
              current_focus, status, energy, action_count, last_active_at, created_at
       FROM agents WHERE id = ?
     `)

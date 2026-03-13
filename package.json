@@ -4,9 +4,29 @@
   "type": "module",
   "private": true,
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.0",
+    "drizzle-kit": "^0.31.9",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "vite": "^8.0.0"
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@github/copilot-sdk": "^0.1.32",
+    "@hono/node-server": "^1.19.11",
+    "drizzle-orm": "^0.45.1",
+    "hono": "^4.12.7",
+    "sqlite-vec": "^0.1.7-alpha.2",
+    "zod": "^4.3.6"
+  },
+  "scripts": {
+    "start:api": "bun src/api/server.ts",
+    "ui:dev": "cd ui && bun run dev",
+    "ui:build": "cd ui && bun run build"
   }
 }
