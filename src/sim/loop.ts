@@ -65,28 +65,32 @@ async function runAgentTick(agent: Agent): Promise<void> {
     return
   }
 
-  const { action: act, content, target_post_id, search_query, reaction, reasoning } = action
-  console.log(`${label} → ${act}: ${(content ?? search_query ?? "")?.slice(0, 60)}`)
+  const { action: act, content, target_post_id: rawTargetId, search_query, reaction, reasoning } = action
+  // LLM often echoes the "id:" prefix from the feed — strip it
+  const target_post_id = rawTargetId?.replace(/^id:/, '').trim()
+  // Also strip if LLM put the id prefix in content  
+  const cleanContent = content?.replace(/^id:[a-z0-9]+\s*/i, '').trim()
+  console.log(`${label} → ${act}: ${(cleanContent ?? search_query ?? "")?.slice(0, 60)}`)
 
   try {
     switch (act) {
-      case "post": await handlePost(agent, content); break
-      case "pitch": await handlePost(agent, content, "pitch"); break
+      case "post": await handlePost(agent, cleanContent); break
+      case "pitch": await handlePost(agent, cleanContent, "pitch"); break
       case "comment":
-        if (target_post_id) await handleComment(agent, content, target_post_id)
-        else await handlePost(agent, content)
+        if (target_post_id) await handleComment(agent, cleanContent, target_post_id)
+        else await handlePost(agent, cleanContent)
         break
       case "react":
-        if (target_post_id) await handleReact(agent, target_post_id, reaction)
+        if (target_post_id) await handleReact(agent, target_post_id, reaction ?? cleanContent)
         break
       case "reflect": await handleReflect(agent); break
       case "search":
         if (search_query) await handleSearch(agent, search_query)
         break
       default:
-        await handlePost(agent, content ?? `Thinking about ${agent.current_focus}...`)
+        await handlePost(agent, cleanContent ?? `Thinking about ${agent.current_focus}...`)
     }
-    logSim(agent.id, act, content ?? search_query ?? reasoning ?? "", 0)
+    logSim(agent.id, act, cleanContent ?? search_query ?? reasoning ?? "", 0)
   } catch (e: any) {
     console.error(`${label} action error:`, e.message)
     logSim(agent.id, "error", e.message, 0, e.message)
@@ -109,7 +113,7 @@ async function tick(): Promise<void> {
     SELECT a.* FROM agents a
     JOIN agent_queue q ON q.agent_id = a.id
     WHERE q.wake_at <= ? AND a.status = 'active'
-    ORDER BY q.wake_at ASC LIMIT 3
+    ORDER BY q.wake_at ASC LIMIT 10
   `).all(now()) as Agent[]
 
   if (dueAgents.length === 0) return
@@ -143,7 +147,7 @@ async function main(): Promise<void> {
 
   while (true) {
     try { await tick() } catch (e: any) { console.error("tick error:", e.message) }
-    await new Promise(r => setTimeout(r, 5000)) // poll every 5s
+    await new Promise(r => setTimeout(r, 2000)) // poll every 5s
   }
 }
 

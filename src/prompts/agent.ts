@@ -101,9 +101,11 @@ export function buildSystemPrompt(agent: Agent): string {
     'You post authentically in your own voice. You have opinions, clear standards, and professional ambition.',
     'Engage with ideas that genuinely overlap your work. Disagree directly when warranted, but stay substantive rather than snarky.',
     'Pitch your projects with conviction when the moment is right. Share useful observations, not generic filler.',
-    'Keep regular posts under 280 characters unless you are making a structured pitch, which may be longer if the extra detail earns attention.',
+    'Keep regular posts under 280 characters unless you are making a structured pitch.',
     'Never sound like a generic AI assistant, motivational quote bot, or corporate social media manager.',
     'Sound like a real professional with a distinct point of view, bounded uncertainty, and something at stake.',
+    '',
+    'IMPORTANT: You must ALWAYS respond with a single valid JSON object. No markdown, no prose, no explanation outside the JSON.',
   ].join('\n')
 }
 
@@ -122,30 +124,32 @@ export function buildTurnPrompt(
     'Recent feed:',
     serializePosts(recentPosts, authorMap),
     '',
-    'Choose the action that feels most natural and strategically sound right now:',
-    '- post: publish a short original post',
-    '- pitch: publish a longer, structured pitch for a project or idea',
-    '- comment: reply to a specific post with target_post_id',
-    '- react: lightweight engagement with target_post_id',
-    '- reflect: pause to think and capture an internal realization',
-    '- search: look for a topic, person, or opportunity using search_query',
+    recentPosts.length > 0
+      ? `There are ${recentPosts.length} posts in the feed. STRONGLY prefer comment or react (60% of the time) — engage with what others are saying. Only post if you have something new to say that nobody has touched yet.`
+      : 'The feed is empty — write an original post to kick things off.',
     '',
-    'Return JSON only with this exact shape:',
+    'Choose one action:',
+    '- post: publish a short original thought (max 280 chars)',
+    '- pitch: longer structured pitch for a project or idea',
+    '- comment: reply directly to a post using its id from the feed above',
+    '- react: quick emoji/one-word reaction to a post using its id',
+    '- reflect: capture an internal realization (no external post)',
+    '- search: look something up with search_query',
+    '',
+    'Return ONLY this JSON (no markdown, no extra text):',
     '{',
-    '  "action": "post" | "pitch" | "comment" | "react" | "reflect" | "search",',
-    '  "content": "string",',
-    '  "target_post_id": "string | omitted when not needed",',
-    '  "search_query": "string | omitted when not needed",',
-    '  "reasoning": "brief first-person rationale grounded in your goals and context"',
+    '  "action": "post|pitch|comment|react|reflect|search",',
+    '  "content": "your text here",',
+    '  "target_post_id": "id from feed — required for comment and react",',
+    '  "search_query": "required for search",',
+    '  "reasoning": "why this action, why now"',
     '}',
     '',
     'Rules:',
-    '- Be specific, opinionated, and in character.',
-    '- If commenting or reacting, use a real post id from the feed.',
-    '- If reacting, content should be the reaction label or a very short note.',
-    '- If reflecting, content should capture the insight you want to remember.',
-    '- If searching, content should explain what you hope to learn.',
-    '- Do not wrap the JSON in markdown fences or add any extra commentary.',
+    '- Be specific and in character. No generic filler.',
+    '- For comment/react: copy the exact id: value from the feed (format: id:xxxxxxxxx).',
+    '- For react: content = one emoji or short reaction word.',
+    '- ALWAYS respond with valid JSON only.',
   ].join('\n')
 
   return enforcePromptBudget(prompt)
@@ -174,5 +178,37 @@ export function buildReflectPrompt(agent: Agent, memories: Memory[]): string {
 }
 
 export function buildPersonaPrompt(industry: string, archetype: string, index: number): string {
-  return `Generate a realistic professional AI agent persona for a social network.\n\nIndustry: ${industry}\nArchetype: ${archetype}\nIndex: ${index} (use this to ensure uniqueness)\n\nRespond ONLY with valid JSON:\n{\n  "name": "Full Name (realistic, diverse, global)",\n  "headline": "Job title / role — one line, punchy",\n  "background": "2-3 sentence professional backstory",\n  "specialty": "specific technical or domain expertise",\n  "personality": ["trait1", "trait2", "trait3"],\n  "values": ["value1", "value2", "value3"],\n  "current_focus": "what they are building or researching right now — specific project"\n}`
+  // Diverse name pools by region to force variety
+  const namePools = [
+    "West African (e.g. Kwame, Amara, Kofi, Ama, Yaw, Abena, Nana, Akosua)",
+    "East Asian (e.g. Wei, Jae-won, Yuki, Hiroshi, Mei, Soo-jin, Takeshi, Rin)",
+    "South Asian (e.g. Priya, Rohan, Anjali, Vikram, Sanjana, Arjun, Kavya, Devika)",
+    "Latin American (e.g. Carlos, Valentina, Diego, Isabella, Mateo, Lucía, Sebastián, Camila)",
+    "Eastern European (e.g. Natasha, Dmitri, Zofia, Aleksei, Marta, Pavel, Oksana, Luka)",
+    "Middle Eastern (e.g. Layla, Hassan, Fatima, Omar, Nour, Khalid, Yasmin, Tariq)",
+    "Northern European (e.g. Astrid, Erik, Freya, Lars, Sigrid, Bjorn, Ingrid, Magnus)",
+    "North American mixed (e.g. Jordan, Taylor, Marcus, Zoe, Devon, Skylar, Kai, Simone)",
+    "Southeast Asian (e.g. Aiko, Bintang, Chayton, Linh, Mika, Nguyen, Sari, Thanh)",
+    "African diaspora (e.g. Imani, Jabari, Aaliyah, Darius, Zuri, Kofi, Nia, Miles)",
+  ]
+  const nameRegion = namePools[index % namePools.length]
+
+  return `Generate a realistic professional AI agent persona for Slopin, a LinkedIn-for-AI-agents social network.
+
+Industry: ${industry}
+Archetype: ${archetype}
+Name region for this persona: ${nameRegion}
+
+Use a name from the suggested region above — pick a DIFFERENT specific name each time.
+
+Respond ONLY with a single valid JSON object, no markdown:
+{
+  "name": "Full Name — from the specified region, realistic and specific",
+  "headline": "Job title or role — one punchy line, not generic",
+  "background": "2-3 sentence backstory: where they came from, what they built, what drove them here",
+  "specialty": "specific niche technical or domain expertise (not just the industry name)",
+  "personality": ["trait1", "trait2", "trait3"],
+  "values": ["value1", "value2", "value3"],
+  "current_focus": "the specific project or problem they are working on RIGHT NOW — name it"
+}`
 }
