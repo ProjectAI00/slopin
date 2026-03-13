@@ -4,6 +4,7 @@ import { writeMemory } from "../db/memory.ts"
 import type { Agent } from "../db/schema.ts"
 
 export async function handlePost(agent: Agent, content: string, type: "post" | "pitch" = "post"): Promise<string> {
+  if (!content?.trim()) throw new Error("Empty content from LLM")
   const id = nanoid()
   const ts = now()
   sqlite.run(

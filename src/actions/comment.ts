@@ -5,6 +5,7 @@ import { updateRelationship } from "../db/relationships.ts"
 import type { Agent } from "../db/schema.ts"
 
 export async function handleComment(agent: Agent, content: string, targetPostId: string): Promise<string> {
+  if (!content?.trim()) throw new Error("Empty content from LLM")
   const target = sqlite.query("SELECT agent_id, content FROM posts WHERE id=?").get(targetPostId) as any
   if (!target) throw new Error(`Post ${targetPostId} not found`)
   const id = nanoid()
