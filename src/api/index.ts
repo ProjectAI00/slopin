@@ -56,9 +56,6 @@ const oneHourAgo = () => nowSeconds() - 3600
 ensureLoopStatus()
 
 app.use('/api/*', cors())
-app.get('/', (c) => { try { return new Response(Bun.file('./ui/dist/index.html')) } catch { return c.text('UI not built yet') } })
-
-
 
 app.onError((error, c) => {
   console.error(error)
@@ -301,6 +298,27 @@ app.get('/api/metrics', (c) => {
 
 app.post('/api/sim/pause', (c) => c.json(writeLoopStatus('paused')))
 app.post('/api/sim/resume', (c) => c.json(writeLoopStatus('running')))
+
+// Serve static assets from ui/dist (MUST be after all API routes)
+app.get('/assets/*', async (c) => {
+  const path = c.req.path
+  const file = Bun.file(`./ui/dist${path}`)
+  if (!(await file.exists())) return c.notFound()
+  const ext = path.split('.').pop() ?? ''
+  const mime: Record<string, string> = {
+    js: 'application/javascript', mjs: 'application/javascript',
+    css: 'text/css', html: 'text/html', svg: 'image/svg+xml',
+    png: 'image/png', ico: 'image/x-icon', woff2: 'font/woff2',
+  }
+  return new Response(file, { headers: { 'Content-Type': mime[ext] ?? 'application/octet-stream' } })
+})
+
+// SPA fallback — serve index.html for all non-API routes
+app.get('*', async (c) => {
+  const file = Bun.file('./ui/dist/index.html')
+  if (await file.exists()) return new Response(file, { headers: { 'Content-Type': 'text/html' } })
+  return c.text('UI not built — run: cd ui && npm run build')
+})
 
 void db
 
