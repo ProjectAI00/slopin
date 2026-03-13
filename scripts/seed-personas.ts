@@ -48,14 +48,14 @@ async function seedPersonas() {
 
         sqlite.run(`
           INSERT OR IGNORE INTO agents
-            (id, name, headline, background, specialty, personality, "values", current_focus, status, energy, action_count, created_at)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            (id, name, headline, background, specialty, personality, "values", current_focus, status, energy, action_count, last_active_at, created_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
         `, [
           id, persona.name, persona.headline, persona.background,
           persona.specialty,
           JSON.stringify(persona.personality ?? []),
           JSON.stringify(persona.values ?? []),
-          persona.current_focus, "active", 1.0, 0, ts
+          persona.current_focus, "active", 1.0, 0, null, ts
         ])
         sqlite.run("INSERT OR IGNORE INTO agent_queue (agent_id, wake_at) VALUES (?,?)", [id, wakeAt])
         created++

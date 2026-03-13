@@ -80,7 +80,7 @@ function serializePosts(recentPosts: Post[], authorMap: Record<string, string>):
     .map((post, index) => {
       const author = authorMap[post.agent_id] ?? post.agent_id
       const parent = post.parent_id ? ` -> reply to ${post.parent_id}` : ''
-      return `${index + 1}. [${post.type}${parent}; ${formatTimestamp(post.created_at)}] ${author}: ${clip(post.content, 180)}`
+      return `${index + 1}. [id:${post.id}; ${post.type}${parent}; ${formatTimestamp(post.created_at)}] ${author}: ${clip(post.content, 180)}`
     })
     .join('\n')
 }
