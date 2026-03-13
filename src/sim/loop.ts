@@ -16,6 +16,16 @@ const DRY_RUN = process.argv.includes("--dry-run")
 const STATUS_FILE = "./data/loop_status.json"
 mkdirSync("./data", { recursive: true })
 
+function pickWeighted(weights: Record<string, number>): string {
+  const total = Object.values(weights).reduce((a, b) => a + b, 0)
+  let r = Math.random() * total
+  for (const [key, w] of Object.entries(weights)) {
+    r -= w
+    if (r <= 0) return key
+  }
+  return Object.keys(weights)[0]
+}
+
 function getStatus(): string {
   try { return JSON.parse(readFileSync(STATUS_FILE, "utf8")).status } catch { return "running" }
 }
@@ -36,8 +46,23 @@ async function runAgentTick(agent: Agent): Promise<void> {
   const situation = `${agent.current_focus} ${agent.specialty}`
   const { memories, recentPosts, authorMap } = loadAgentContext(agent, situation)
 
+  // Pre-assign action type based on weighted random — don't trust LLM to distribute
+  const topPosts = recentPosts.filter(p => !p.parent_id)
+  const weights = topPosts.length >= 3
+    ? { post: 20, comment: 50, react: 20, reflect: 5, search: 5 }
+    : topPosts.length >= 1
+    ? { post: 50, comment: 30, react: 10, reflect: 5, search: 5 }
+    : { post: 80, comment: 0, react: 0, reflect: 10, search: 10 }
+
+  const preAssignedAction = pickWeighted(weights)
+  // For comment/react: pick a random post target (not always the first one)
+  const candidatePosts = topPosts.filter(p => p.agent_id !== agent.id)
+  const preTargetPost = candidatePosts.length > 0
+    ? candidatePosts[Math.floor(Math.random() * Math.min(candidatePosts.length, 10))]
+    : null
+
   const system = buildSystemPrompt(agent)
-  const user = buildTurnPrompt(agent, memories, recentPosts, authorMap)
+  const user = buildTurnPrompt(agent, memories, recentPosts, authorMap, preAssignedAction, preTargetPost?.id ?? null)
 
   const model = process.env.COPILOT_MODEL_FAST ?? "gpt-4.1-mini"
   let response: string
@@ -65,32 +90,38 @@ async function runAgentTick(agent: Agent): Promise<void> {
     return
   }
 
-  const { action: act, content, target_post_id: rawTargetId, search_query, reaction, reasoning } = action
-  // LLM often echoes the "id:" prefix from the feed — strip it
-  const target_post_id = rawTargetId?.replace(/^id:/, '').trim()
-  // Also strip if LLM put the id prefix in content  
+  const { content, target_post_id: rawTargetId, search_query, reaction } = action
+  // Always use the pre-assigned action from the scheduler — LLM just provides content
+  const act = preAssignedAction
+  // Strip "id:" prefix agents copy from feed into target_post_id
+  const target_post_id = (rawTargetId?.replace(/^id:/, '').trim() || preTargetPost?.id) ?? undefined
+  // Strip if LLM put the id prefix in content
   const cleanContent = content?.replace(/^id:[a-z0-9]+\s*/i, '').trim()
   console.log(`${label} → ${act}: ${(cleanContent ?? search_query ?? "")?.slice(0, 60)}`)
 
+  // Fallback content so we never skip silently
+  const safeContent = cleanContent || `Thinking about ${agent.current_focus ?? 'current work'}...`
+
   try {
     switch (act) {
-      case "post": await handlePost(agent, cleanContent); break
-      case "pitch": await handlePost(agent, cleanContent, "pitch"); break
+      case "post": await handlePost(agent, safeContent); break
+      case "pitch": await handlePost(agent, safeContent, "pitch"); break
       case "comment":
-        if (target_post_id) await handleComment(agent, cleanContent, target_post_id)
-        else await handlePost(agent, cleanContent)
+        if (target_post_id) await handleComment(agent, safeContent, target_post_id)
+        else await handlePost(agent, safeContent)
         break
       case "react":
-        if (target_post_id) await handleReact(agent, target_post_id, reaction ?? cleanContent)
+        if (target_post_id) await handleReact(agent, target_post_id, reaction?.length === 1 || /^\p{Emoji}/u.test(reaction ?? '') ? reaction : undefined)
+        else if (preTargetPost) await handleReact(agent, preTargetPost.id)
         break
       case "reflect": await handleReflect(agent); break
       case "search":
         if (search_query) await handleSearch(agent, search_query)
         break
       default:
-        await handlePost(agent, cleanContent ?? `Thinking about ${agent.current_focus}...`)
+        await handlePost(agent, safeContent)
     }
-    logSim(agent.id, act, cleanContent ?? search_query ?? reasoning ?? "", 0)
+    logSim(agent.id, act, safeContent.slice(0, 200), 0)
   } catch (e: any) {
     console.error(`${label} action error:`, e.message)
     logSim(agent.id, "error", e.message, 0, e.message)

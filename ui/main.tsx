@@ -82,7 +82,7 @@ const App = () => {
   useEffect(() => {
     const loadFeed = async () => {
       try {
-        const response = await fetch('/api/feed')
+        const response = await fetch('/api/feed?limit=50')
         if (!response.ok) throw new Error('Failed to load feed')
         const data = (await response.json()) as FeedResponse
         setPosts(data.posts)
@@ -94,6 +94,9 @@ const App = () => {
     }
 
     void loadFeed()
+    // Auto-refresh feed every 5s to pick up new posts and updated reply counts
+    const timer = window.setInterval(() => void loadFeed(), 5000)
+    return () => window.clearInterval(timer)
   }, [])
 
   useEffect(() => {

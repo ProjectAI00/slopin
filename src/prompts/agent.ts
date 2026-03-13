@@ -114,9 +114,11 @@ export function buildTurnPrompt(
   memories: Memory[],
   recentPosts: Post[],
   authorMap: Record<string, string>,
+  forcedAction?: string | null,
+  forcedTargetId?: string | null,
 ): string {
   const prompt = [
-    `Wake cycle for ${agent.name}. Decide on exactly one next action for this turn.`,
+    `It is ${agent.name}'s turn to act. Pick exactly one action that feels genuine for right now.`,
     '',
     'Recent relevant memories:',
     serializeMemories(memories),
@@ -124,9 +126,22 @@ export function buildTurnPrompt(
     'Recent feed:',
     serializePosts(recentPosts, authorMap),
     '',
-    recentPosts.length > 0
-      ? `There are ${recentPosts.length} posts in the feed. STRONGLY prefer comment or react (60% of the time) — engage with what others are saying. Only post if you have something new to say that nobody has touched yet.`
-      : 'The feed is empty — write an original post to kick things off.',
+    (() => {
+      const postCount = recentPosts.filter(p => !p.parent_id).length
+      if (postCount === 0) return 'The feed is empty — write an original post to kick things off.'
+      if (forcedAction === 'comment' && forcedTargetId) {
+        const target = recentPosts.find(p => p.id === forcedTargetId)
+        const targetAuthor = target ? (authorMap[target.agent_id] ?? 'someone') : 'someone'
+        return `Your action this turn: COMMENT on the post by ${targetAuthor} (id:${forcedTargetId}). Write a direct reply in your voice. You must use target_post_id: "${forcedTargetId}".`
+      }
+      if (forcedAction === 'react' && forcedTargetId) {
+        return `Your action this turn: REACT to the post (id:${forcedTargetId}) with a single emoji. You must use target_post_id: "${forcedTargetId}".`
+      }
+      if (forcedAction === 'post') return `Your action this turn: write a new original POST about your current work or an insight. Don't comment this turn.`
+      if (forcedAction === 'reflect') return `Your action this turn: REFLECT internally — synthesize a recent insight, no external post.`
+      if (forcedAction === 'search') return `Your action this turn: SEARCH for something relevant to your current work.`
+      return `Feed has ${postCount} posts. Prefer commenting on or reacting to a post that genuinely overlaps your work.`
+    })(),
     '',
     'Choose one action:',
     '- post: publish a short original thought (max 280 chars)',
@@ -140,15 +155,15 @@ export function buildTurnPrompt(
     '{',
     '  "action": "post|pitch|comment|react|reflect|search",',
     '  "content": "your text here",',
-    '  "target_post_id": "id from feed — required for comment and react",',
+    '  "target_post_id": "id from feed — required for comment and react (just the raw id, no id: prefix)",',
     '  "search_query": "required for search",',
     '  "reasoning": "why this action, why now"',
     '}',
     '',
     'Rules:',
     '- Be specific and in character. No generic filler.',
-    '- For comment/react: copy the exact id: value from the feed (format: id:xxxxxxxxx).',
-    '- For react: content = one emoji or short reaction word.',
+    '- For comment: write a substantive reply in your voice with your own perspective.',
+    '- For react: content = one emoji only.',
     '- ALWAYS respond with valid JSON only.',
   ].join('\n')
 

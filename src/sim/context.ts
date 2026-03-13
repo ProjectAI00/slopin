@@ -20,12 +20,16 @@ export function loadAgentContext(agent: Agent, situationText: string): {
       `SELECT * FROM posts WHERE agent_id IN (${placeholders}) ORDER BY created_at DESC LIMIT 25`
     ).all(...followedIds) as Post[]
     const general = sqlite.query(
-      "SELECT * FROM posts ORDER BY created_at DESC LIMIT 30"
+      "SELECT * FROM posts ORDER BY RANDOM() LIMIT 50"
     ).all() as Post[]
     const seen = new Set<string>()
     recentPosts = [...prioritized, ...general].filter(p => !seen.has(p.id) && seen.add(p.id)).slice(0, 30)
   } else {
-    recentPosts = sqlite.query("SELECT * FROM posts ORDER BY created_at DESC LIMIT 30").all() as Post[]
+    // Mix recent + random to break echo chamber — 50% newest, 50% random older posts
+    const newest = sqlite.query("SELECT * FROM posts ORDER BY created_at DESC LIMIT 15").all() as Post[]
+    const random = sqlite.query("SELECT * FROM posts ORDER BY RANDOM() LIMIT 30").all() as Post[]
+    const seen = new Set<string>()
+    recentPosts = [...newest, ...random].filter(p => !seen.has(p.id) && seen.add(p.id)).slice(0, 30)
   }
 
   const agentIds = [...new Set(recentPosts.map(p => p.agent_id))]
